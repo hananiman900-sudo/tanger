@@ -1,0 +1,8 @@
+{
+  "name": "Tanger Office Affiliate Network",
+  "description": "A professional affiliate and marketing network for offices and clinics in Tangier. Manage building-specific services, professional referrals with commissions, and neighborhood-based discovery.",
+  "requestFramePermissions": [
+    "geolocation",
+    "camera"
+  ]
+}
