@@ -8,28 +8,62 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export const SQL_SNIPPETS = [
   {
-    id: 'ADMIN_FULL_UPGRADE',
-    title: '👑 ترقية الحساب وتجهيز النظام',
-    description: 'يرقي رقمك لمدير وينشئ جداول العمارات والتخصصات.',
+    id: 'TOTAL_REPAIR_V2',
+    title: '🚀 الإصلاح الشامل والنهائي لقاعدة البيانات',
+    description: 'شغل هذا الكود لإصلاح كافة المشاكل (الاسم، الهاتف، الصورة، الروابط، الحساب البنكي) وضمان حفظ البيانات.',
     code: `
--- ترقية المدير
-UPDATE public.profiles SET role = 'ADMIN', status = 'ACTIVE' WHERE phone = '0617774846';
+-- 1. التأكد من وجود كافة الأعمدة المطلوبة في جدول profiles
+ALTER TABLE public.profiles 
+ADD COLUMN IF NOT EXISTS full_name TEXT,
+ADD COLUMN IF NOT EXISTS phone TEXT,
+ADD COLUMN IF NOT EXISTS profile_image TEXT,
+ADD COLUMN IF NOT EXISTS bank_account TEXT,
+ADD COLUMN IF NOT EXISTS social_links JSONB DEFAULT '{"facebook": "", "instagram": "", "linkedin": "", "whatsapp": ""}',
+ADD COLUMN IF NOT EXISTS active_hours TEXT DEFAULT '',
+ADD COLUMN IF NOT EXISTS gps_location TEXT DEFAULT '',
+ADD COLUMN IF NOT EXISTS referral_code TEXT,
+ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'PENDING',
+ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'PROFESSIONAL';
 
--- إنشاء جدول العمارات
-CREATE TABLE IF NOT EXISTS public.buildings (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    name TEXT NOT NULL,
-    address TEXT,
-    neighborhood_id TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
-);
+-- 2. تصحيح وظيفة إنشاء الملف الشخصي التلقائي
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+BEGIN
+  INSERT INTO public.profiles (id, full_name, phone, role, status, referral_code)
+  VALUES (
+    new.id,
+    COALESCE(new.raw_user_meta_data->>'full_name', 'مستخدم جديد'),
+    COALESCE(new.raw_user_meta_data->>'phone', ''),
+    'PROFESSIONAL',
+    'PENDING',
+    'TGR' || floor(random() * 1000000)::text
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    full_name = EXCLUDED.full_name,
+    phone = EXCLUDED.phone;
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- إنشاء جدول التخصصات
-CREATE TABLE IF NOT EXISTS public.specialties (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
-);
+-- 3. تفعيل الـ Trigger
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+
+-- 4. إصلاح سياسات الحماية (RLS) لضمان قدرة المستخدم على التحديث
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON public.profiles;
+CREATE POLICY "Public profiles are viewable by everyone" ON public.profiles 
+FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
+CREATE POLICY "Users can update own profile" ON public.profiles 
+FOR UPDATE USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
+
+-- 5. تحديث الـ Schema
+NOTIFY pgrst, 'reload schema';
     `
   }
 ];

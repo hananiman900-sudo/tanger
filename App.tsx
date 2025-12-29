@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  Building2, Search, LayoutDashboard, UserCircle, Bell, Globe, LogOut
+  Building2, Search, LayoutDashboard, UserCircle, Bell, LogOut, AlertCircle, Loader2, Database, RefreshCcw, Home, PlusCircle, ChevronLeft, Menu
 } from 'lucide-react';
 import { User, UserRole, AccountStatus, Referral, Language } from './types';
 import { translations } from './translations';
@@ -24,78 +24,99 @@ const App: React.FC = () => {
   const [lang, setLang] = useState<Language>('ar');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [referrals, setReferrals] = useState<Referral[]>([]);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [hash, setHash] = useState(window.location.hash);
 
-  const t = translations[lang];
-
-  const mapProfile = (data: any): User => {
-    return {
-      id: data.id,
-      fullName: data.full_name || '',
-      phone: data.phone || '',
-      role: (data.role as UserRole) || UserRole.PROFESSIONAL,
-      status: (data.status as AccountStatus) || AccountStatus.PENDING,
-      neighborhood: data.neighborhood,
-      specialty: data.specialty,
-      buildingId: data.building_id,
-      floor: data.floor,
-      description: data.description,
-      profileImage: data.profile_image,
-      balancePending: Number(data.balance_pending || 0),
-      balanceCompleted: Number(data.balance_completed || 0),
-      subscriptionStart: data.created_at,
-      subscriptionExpiry: data.subscription_expiry,
-      referralCode: data.referral_code || '',
-      bankAccount: data.bank_account
-    };
-  };
+  const t = translations[lang] || translations.ar;
 
   useEffect(() => {
     const handleHashChange = () => setHash(window.location.hash);
     window.addEventListener('hashchange', handleHashChange);
-    checkUser();
-    
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session) { await fetchProfile(session.user.id); } 
-      else { setCurrentUser(null); }
-    });
-
-    const timer = setTimeout(() => { setLoading(false); }, 2000);
-    return () => {
-      window.removeEventListener('hashchange', handleHashChange);
-      clearTimeout(timer);
-      authListener.subscription.unsubscribe();
-    };
+    return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
-  const checkUser = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) { await fetchProfile(session.user.id); }
-  };
+  const mapProfile = (data: any): User => ({
+    id: data.id,
+    fullName: data.full_name || 'Utilisateur',
+    phone: data.phone || '',
+    role: (data.role as UserRole) || UserRole.PROFESSIONAL,
+    status: (data.status as AccountStatus) || AccountStatus.PENDING,
+    neighborhood: data.neighborhood,
+    specialty: data.specialty,
+    buildingId: data.building_id,
+    floor: data.floor,
+    description: data.description,
+    profileImage: data.profile_image,
+    balancePending: Number(data.balance_pending || 0),
+    balanceCompleted: Number(data.balance_completed || 0),
+    referralCode: data.referral_code || '',
+    bankAccount: data.bank_account,
+    socialLinks: data.social_links,
+    activeHours: data.active_hours,
+    gpsLocation: data.gps_location,
+    referralCount: data.referral_count
+  });
 
   const fetchProfile = async (userId: string) => {
-    const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
-    if (data) { setCurrentUser(mapProfile(data)); }
-  };
-
-  const handleLogout = async () => {
-    // Force local state clear first for immediate UI feedback
-    setCurrentUser(null);
-    window.location.hash = ''; 
     try {
-      await supabase.auth.signOut();
-    } catch (error) {
-      console.error('Logout error:', error);
+      const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+      if (data) {
+        setCurrentUser(mapProfile(data));
+      }
+    } catch (err) {
+      console.error("Error fetching profile:", err);
     }
   };
 
-  const handleSetUserAfterAuth = (user: any) => { setCurrentUser(mapProfile(user)); };
+  useEffect(() => {
+    // Safety timer to remove splash screen after 3 seconds max
+    const timer = setTimeout(() => {
+      setLoading(false);
+    }, 3000);
+
+    const initApp = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        await fetchProfile(session.user.id);
+      }
+      setLoading(false);
+      clearTimeout(timer);
+    };
+    
+    initApp();
+    
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        await fetchProfile(session.user.id);
+      } else if (event === 'SIGNED_OUT') {
+        setCurrentUser(null);
+        setActiveTab('dashboard');
+      }
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+      clearTimeout(timer);
+    };
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setCurrentUser(null);
+    window.location.hash = '';
+  };
+
+  const handleProfileUpdate = async () => {
+    if (currentUser) {
+      await fetchProfile(currentUser.id);
+    }
+  };
 
   if (loading) return <SplashScreen lang={lang} />;
+  
   if (!currentUser) {
-    if (hash === '#register') return <Register lang={lang} onRegister={handleSetUserAfterAuth} />;
-    if (hash === '#login') return <Login lang={lang} onLogin={handleSetUserAfterAuth} setLang={setLang} />;
+    if (hash === '#register') return <Register lang={lang} onRegister={() => setHash('#login')} />;
+    if (hash === '#login') return <Login lang={lang} onLogin={setCurrentUser} setLang={setLang} />;
     return <LandingPage lang={lang} setLang={setLang} />;
   }
 
@@ -103,60 +124,110 @@ const App: React.FC = () => {
     return <PendingApproval lang={lang} user={currentUser} onLogout={handleLogout} />;
   }
 
+  const navItems = [
+    { id: 'dashboard', label: t.dashboard, icon: <Home size={22} /> },
+    { id: 'search', label: t.search, icon: <PlusCircle size={22} /> },
+    { id: 'buildings', label: t.buildings, icon: <Building2 size={22} /> },
+    { id: 'profile', label: t.profile, icon: <UserCircle size={22} /> },
+  ];
+
   const renderContent = () => {
     if (currentUser.role === UserRole.ADMIN) return <AdminDashboard lang={lang} onLogout={handleLogout} />;
     switch (activeTab) {
-      case 'dashboard': return <ProDashboard lang={lang} user={currentUser} referrals={referrals} setReferrals={setReferrals} />;
+      case 'dashboard': return <ProDashboard lang={lang} user={currentUser} />;
       case 'search': return <SearchPage lang={lang} user={currentUser} />;
-      case 'buildings': return <BuildingDirectory lang={lang} />;
-      case 'profile': return <ProfilePage lang={lang} user={currentUser} onLogout={handleLogout} />;
-      default: return <ProDashboard lang={lang} user={currentUser} referrals={referrals} setReferrals={setReferrals} />;
+      case 'buildings': return <BuildingDirectory />;
+      case 'profile': return <ProfilePage lang={lang} user={currentUser} onLogout={handleLogout} onUpdate={handleProfileUpdate} />;
+      default: return <ProDashboard lang={lang} user={currentUser} />;
     }
   };
 
   return (
-    <div className={`flex flex-col h-screen bg-[#F8FAFC] overflow-hidden ${t.font}`} dir={t.dir}>
-      <header className="bg-white border-b px-6 py-4 flex items-center justify-between sticky top-0 z-30 shadow-sm">
-        <div className="flex items-center space-x-3 space-x-reverse">
-          <div className="bg-blue-600 p-2 rounded-2xl shadow-lg shadow-blue-100"><Building2 className="text-white w-6 h-6" /></div>
-          <div className="flex flex-col">
-            <span className="font-black text-xl text-slate-900 leading-none">{t.appName}</span>
-            <span className="text-blue-600 text-[10px] font-black uppercase tracking-widest mt-1">{t.appSub}</span>
-          </div>
-        </div>
-        <div className="flex items-center space-x-4 space-x-reverse">
-          <button className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-2xl transition-all"><Bell className="w-6 h-6" /></button>
-          <div className="flex items-center space-x-3 space-x-reverse border-r pr-4 hidden sm:flex">
-            <div className="text-left">
-              <p className="text-sm font-black text-slate-900 leading-none">{currentUser.fullName}</p>
-              <p className="text-[10px] text-blue-600 font-bold mt-1">{currentUser.role === UserRole.ADMIN ? 'مدير نظام' : (currentUser.specialty || 'مهني')}</p>
-            </div>
-            <img src={currentUser.profileImage || `https://picsum.photos/seed/${currentUser.id}/100`} className="w-10 h-10 rounded-2xl border-2 border-white shadow-md object-cover"/>
-          </div>
-        </div>
-      </header>
-      <main className="flex-1 overflow-y-auto pb-32">
-        <div className="max-w-6xl mx-auto h-full">{renderContent()}</div>
-      </main>
+    <div className={`flex h-screen bg-[#F8FAFC] ${t.font}`} dir={t.dir}>
       {currentUser.role !== UserRole.ADMIN && (
-        <nav className="fixed bottom-0 left-0 right-0 p-4 sm:p-6 z-40 pointer-events-none">
-          <div className="max-w-xl mx-auto bg-white/90 backdrop-blur-xl border border-white shadow-2xl rounded-[32px] flex items-center justify-around px-4 py-3 pointer-events-auto">
-            <NavButton active={activeTab === 'dashboard'} icon={<LayoutDashboard size={24} />} label={t.dashboard} onClick={() => setActiveTab('dashboard')} lang={lang}/>
-            <NavButton active={activeTab === 'search'} icon={<Search size={24} />} label={t.search} onClick={() => setActiveTab('search')} lang={lang}/>
-            <NavButton active={activeTab === 'buildings'} icon={<Building2 size={24} />} label={t.buildings} onClick={() => setActiveTab('buildings')} lang={lang}/>
-            <NavButton active={activeTab === 'profile'} icon={<UserCircle size={24} />} label={t.profile} onClick={() => setActiveTab('profile')} lang={lang}/>
+        <aside className={`hidden md:flex flex-col bg-slate-900 text-white transition-all duration-300 ${isSidebarOpen ? 'w-72' : 'w-24'} border-l border-white/5 relative z-50`}>
+          <div className="p-6 flex items-center justify-between">
+            {isSidebarOpen && (
+              <div className="flex items-center gap-3">
+                <div className="bg-blue-600 p-2 rounded-xl"><Building2 className="w-5 h-5" /></div>
+                <span className="font-black text-xl tracking-tight">TangerHub</span>
+              </div>
+            )}
+            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 hover:bg-white/10 rounded-xl transition-colors">
+              <Menu size={20} />
+            </button>
           </div>
-        </nav>
+
+          <nav className="flex-1 px-4 mt-10 space-y-2">
+            {navItems.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all ${
+                  activeTab === item.id ? 'bg-blue-600 text-white shadow-xl shadow-blue-500/20' : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                }`}
+              >
+                <div className="shrink-0">{item.icon}</div>
+                {isSidebarOpen && <span className="font-bold text-sm">{item.label}</span>}
+              </button>
+            ))}
+          </nav>
+
+          <div className="p-4 border-t border-white/5">
+            <button onClick={handleLogout} className="w-full flex items-center gap-4 px-5 py-4 text-red-400 hover:bg-red-500/10 rounded-2xl transition-all">
+              <LogOut size={22} />
+              {isSidebarOpen && <span className="font-bold text-sm">خروج</span>}
+            </button>
+          </div>
+        </aside>
       )}
+
+      <div className="flex-1 flex flex-col h-full overflow-hidden">
+        <header className="bg-white border-b px-6 py-4 flex items-center justify-between z-30">
+          <div className="flex items-center gap-3 md:hidden">
+             <div className="bg-blue-600 p-2 rounded-xl text-white"><Building2 size={20} /></div>
+             <span className="font-black text-lg">TangerHub</span>
+          </div>
+          <div className="hidden md:block">
+            <h2 className="text-sm font-black text-slate-400 uppercase tracking-widest">{t.appName} / {navItems.find(i => i.id === activeTab)?.label}</h2>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="text-right hidden sm:block">
+              <p className="text-sm font-black text-slate-900 leading-none">{currentUser.fullName}</p>
+              <p className="text-[10px] text-blue-600 font-bold mt-1 uppercase">{currentUser.specialty}</p>
+            </div>
+            <img 
+              src={currentUser.profileImage || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.fullName)}&background=0D8ABC&color=fff`} 
+              className="w-10 h-10 rounded-xl border border-slate-100 shadow-sm object-cover"
+            />
+          </div>
+        </header>
+
+        <main className="flex-1 overflow-y-auto bg-[#F8FAFC]">
+          <div className="max-w-6xl mx-auto p-4 md:p-8 h-full">
+            {renderContent()}
+          </div>
+        </main>
+
+        {currentUser.role !== UserRole.ADMIN && (
+          <nav className="md:hidden bg-white border-t px-2 py-2 flex items-center justify-around z-40">
+            {navItems.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-all ${
+                  activeTab === item.id ? 'text-blue-600 bg-blue-50' : 'text-slate-400'
+                }`}
+              >
+                {item.icon}
+                <span className="text-[9px] font-black">{item.label}</span>
+              </button>
+            ))}
+          </nav>
+        )}
+      </div>
     </div>
   );
 };
-
-const NavButton: React.FC<any> = ({ active, icon, label, onClick }) => (
-  <button onClick={onClick} className={`flex flex-col items-center justify-center space-y-1 min-w-[70px] py-1.5 rounded-2xl transition-all duration-300 ${active ? 'text-blue-600 scale-110' : 'text-slate-400 hover:text-slate-600'}`}>
-    <div className={`p-1.5 rounded-xl transition-all ${active ? 'bg-blue-600/10' : ''}`}>{icon}</div>
-    <span className="text-[10px] font-black uppercase tracking-wider">{label}</span>
-  </button>
-);
 
 export default App;

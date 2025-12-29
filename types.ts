@@ -13,18 +13,6 @@ export enum AccountStatus {
 
 export type Language = 'ar' | 'fr' | 'en';
 
-export interface Neighborhood {
-  id: string;
-  name: string;
-}
-
-export interface Building {
-  id: string;
-  name: string;
-  neighborhoodId: string;
-  address: string;
-}
-
 export interface User {
   id: string;
   fullName: string;
@@ -39,31 +27,51 @@ export interface User {
   profileImage?: string;
   balancePending: number;
   balanceCompleted: number;
-  subscriptionStart?: string;
-  subscriptionExpiry?: string;
   referralCode: string;
   bankAccount?: string;
+  socialLinks?: {
+    facebook?: string;
+    instagram?: string;
+    linkedin?: string;
+    whatsapp?: string;
+  };
+  activeHours?: string;
+  gpsLocation?: string;
+  referralCount?: number;
 }
 
+export interface Post {
+  id: string;
+  user_id: string;
+  image_url: string;
+  content: string;
+  created_at: string;
+}
+
+/* Added missing Neighborhood interface exported to constants.tsx */
+export interface Neighborhood {
+  id: string;
+  name: string;
+}
+
+/* Added missing Building interface exported to constants.tsx */
+export interface Building {
+  id: string;
+  name: string;
+  neighborhoodId: string;
+  address: string;
+}
+
+/* Added missing Referral interface exported to App.tsx */
 export interface Referral {
   id: string;
-  code: string;
   referrer_id: string;
   receiver_id: string;
   patient_name: string;
-  reason: string;
-  status: 'PENDING' | 'COMPLETED';
-  commission_amount: number;
+  patient_condition?: string;
+  code: string;
+  status: 'PENDING' | 'COMPLETED' | 'CANCELLED';
   created_at: string;
-  referrer_name?: string;
-  receiver_name?: string;
-}
-
-export interface AppNotification {
-  id: string;
-  title: string;
-  message: string;
-  sender: string;
-  is_read: boolean;
-  created_at: string;
+  referrer?: Partial<User>;
+  receiver?: Partial<User>;
 }
