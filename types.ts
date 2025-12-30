@@ -23,6 +23,7 @@ export interface User {
   specialty?: string;
   buildingId?: string;
   floor?: string;
+  officeNumber?: string;
   description?: string;
   profileImage?: string;
   balancePending: number;
@@ -48,13 +49,11 @@ export interface Post {
   created_at: string;
 }
 
-/* Added missing Neighborhood interface exported to constants.tsx */
 export interface Neighborhood {
   id: string;
   name: string;
 }
 
-/* Added missing Building interface exported to constants.tsx */
 export interface Building {
   id: string;
   name: string;
@@ -62,7 +61,6 @@ export interface Building {
   address: string;
 }
 
-/* Added missing Referral interface exported to App.tsx */
 export interface Referral {
   id: string;
   referrer_id: string;
@@ -74,4 +72,14 @@ export interface Referral {
   created_at: string;
   referrer?: Partial<User>;
   receiver?: Partial<User>;
+}
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  title: string;
+  message: string;
+  type: 'REFERRAL' | 'PAYMENT' | 'SYSTEM';
+  is_read: boolean;
+  created_at: string;
 }

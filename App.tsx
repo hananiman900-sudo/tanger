@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  Building2, Search, LayoutDashboard, UserCircle, Bell, LogOut, AlertCircle, Loader2, Database, RefreshCcw, Home, PlusCircle, ChevronLeft, Menu
+  Building2, Search, LayoutDashboard, UserCircle, Bell, LogOut, AlertCircle, Loader2, Database, RefreshCcw, Home, PlusCircle, ChevronLeft, Menu, X, CheckCircle2, DollarSign, Info
 } from 'lucide-react';
-import { User, UserRole, AccountStatus, Referral, Language } from './types';
+import { User, UserRole, AccountStatus, Referral, Language, Notification } from './types';
 import { translations } from './translations';
 import { supabase } from './supabase';
 
@@ -26,6 +26,8 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [hash, setHash] = useState(window.location.hash);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
 
   const t = translations[lang] || translations.ar;
 
@@ -34,6 +36,22 @@ const App: React.FC = () => {
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
+
+  const fetchNotifications = async (userId: string) => {
+    const { data } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(20);
+    if (data) setNotifications(data);
+  };
+
+  const markAllAsRead = async () => {
+    if (!currentUser) return;
+    await supabase.from('notifications').update({ is_read: true }).eq('user_id', currentUser.id);
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+  };
 
   const mapProfile = (data: any): User => ({
     id: data.id,
@@ -45,6 +63,7 @@ const App: React.FC = () => {
     specialty: data.specialty,
     buildingId: data.building_id,
     floor: data.floor,
+    officeNumber: data.office_number,
     description: data.description,
     profileImage: data.profile_image,
     balancePending: Number(data.balance_pending || 0),
@@ -62,6 +81,10 @@ const App: React.FC = () => {
       const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
       if (data) {
         setCurrentUser(mapProfile(data));
+        fetchNotifications(userId);
+      } else {
+        setCurrentUser(null);
+        await supabase.auth.signOut();
       }
     } catch (err) {
       console.error("Error fetching profile:", err);
@@ -69,35 +92,25 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    // Safety timer to remove splash screen after 3 seconds max
-    const timer = setTimeout(() => {
-      setLoading(false);
-    }, 3000);
-
     const initApp = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         await fetchProfile(session.user.id);
       }
-      setLoading(false);
-      clearTimeout(timer);
+      setTimeout(() => setLoading(false), 2000);
     };
-    
     initApp();
-    
+
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session) {
-        await fetchProfile(session.user.id);
-      } else if (event === 'SIGNED_OUT') {
-        setCurrentUser(null);
-        setActiveTab('dashboard');
+      if (event === 'SIGNED_IN' && session) { 
+        await fetchProfile(session.user.id); 
+      } 
+      else if (event === 'SIGNED_OUT') { 
+        setCurrentUser(null); 
+        setActiveTab('dashboard'); 
       }
     });
-
-    return () => {
-      authListener.subscription.unsubscribe();
-      clearTimeout(timer);
-    };
+    return () => { authListener.subscription.unsubscribe(); };
   }, []);
 
   const handleLogout = async () => {
@@ -106,16 +119,10 @@ const App: React.FC = () => {
     window.location.hash = '';
   };
 
-  const handleProfileUpdate = async () => {
-    if (currentUser) {
-      await fetchProfile(currentUser.id);
-    }
-  };
-
   if (loading) return <SplashScreen lang={lang} />;
   
   if (!currentUser) {
-    if (hash === '#register') return <Register lang={lang} onRegister={() => setHash('#login')} />;
+    if (hash === '#register') return <Register lang={lang} onRegister={(user) => { setCurrentUser(user); window.location.hash = ''; }} />;
     if (hash === '#login') return <Login lang={lang} onLogin={setCurrentUser} setLang={setLang} />;
     return <LandingPage lang={lang} setLang={setLang} />;
   }
@@ -131,19 +138,58 @@ const App: React.FC = () => {
     { id: 'profile', label: t.profile, icon: <UserCircle size={22} /> },
   ];
 
+  const unreadCount = notifications.filter(n => !n.is_read).length;
+
   const renderContent = () => {
     if (currentUser.role === UserRole.ADMIN) return <AdminDashboard lang={lang} onLogout={handleLogout} />;
     switch (activeTab) {
       case 'dashboard': return <ProDashboard lang={lang} user={currentUser} />;
       case 'search': return <SearchPage lang={lang} user={currentUser} />;
       case 'buildings': return <BuildingDirectory />;
-      case 'profile': return <ProfilePage lang={lang} user={currentUser} onLogout={handleLogout} onUpdate={handleProfileUpdate} />;
+      case 'profile': return <ProfilePage lang={lang} user={currentUser} onLogout={handleLogout} onUpdate={() => fetchProfile(currentUser.id)} />;
       default: return <ProDashboard lang={lang} user={currentUser} />;
     }
   };
 
   return (
     <div className={`flex h-screen bg-[#F8FAFC] ${t.font}`} dir={t.dir}>
+      {showNotifications && (
+        <div className="fixed inset-0 z-[100] flex">
+           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowNotifications(false)}></div>
+           <div className={`relative bg-white w-full max-w-sm h-full shadow-2xl animate-in ${lang === 'ar' ? 'slide-in-from-right' : 'slide-in-from-left'} duration-300 flex flex-col`}>
+              <div className="p-6 border-b flex justify-between items-center bg-slate-50">
+                 <h3 className="text-xl font-black text-slate-900">التنبيهات</h3>
+                 <button onClick={() => setShowNotifications(false)} className="p-2 bg-white rounded-xl shadow-sm"><X size={20}/></button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                 {notifications.length > 0 ? notifications.map(notif => (
+                    <div key={notif.id} className={`p-4 rounded-2xl border flex gap-4 transition-all ${notif.is_read ? 'bg-white border-slate-100 opacity-70' : 'bg-blue-50 border-blue-100 shadow-sm'}`}>
+                       <div className={`p-3 rounded-xl shrink-0 h-fit ${
+                          notif.type === 'REFERRAL' ? 'bg-amber-100 text-amber-600' : 
+                          notif.type === 'PAYMENT' ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'
+                       }`}>
+                          {notif.type === 'REFERRAL' ? <PlusCircle size={20}/> : notif.type === 'PAYMENT' ? <DollarSign size={20}/> : <Info size={20}/>}
+                       </div>
+                       <div className="flex-1">
+                          <p className="text-sm font-black text-slate-900 leading-tight mb-1">{notif.title}</p>
+                          <p className="text-xs text-slate-500 font-bold leading-relaxed">{notif.message}</p>
+                          <p className="text-[8px] text-slate-400 mt-2 uppercase font-black">{new Date(notif.created_at).toLocaleTimeString()}</p>
+                       </div>
+                    </div>
+                 )) : (
+                   <div className="flex flex-col items-center justify-center h-full text-slate-300">
+                      <Bell size={48} className="mb-4 opacity-20" />
+                      <p className="font-black text-xs uppercase tracking-widest">لا توجد تنبيهات جديدة</p>
+                   </div>
+                 )}
+              </div>
+              <div className="p-6 border-t bg-slate-50">
+                 <button onClick={markAllAsRead} className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-xs active:scale-95 transition-all">تحديد الكل كمقروء</button>
+              </div>
+           </div>
+        </div>
+      )}
+
       {currentUser.role !== UserRole.ADMIN && (
         <aside className={`hidden md:flex flex-col bg-slate-900 text-white transition-all duration-300 ${isSidebarOpen ? 'w-72' : 'w-24'} border-l border-white/5 relative z-50`}>
           <div className="p-6 flex items-center justify-between">
@@ -157,7 +203,6 @@ const App: React.FC = () => {
               <Menu size={20} />
             </button>
           </div>
-
           <nav className="flex-1 px-4 mt-10 space-y-2">
             {navItems.map((item) => (
               <button
@@ -172,7 +217,6 @@ const App: React.FC = () => {
               </button>
             ))}
           </nav>
-
           <div className="p-4 border-t border-white/5">
             <button onClick={handleLogout} className="w-full flex items-center gap-4 px-5 py-4 text-red-400 hover:bg-red-500/10 rounded-2xl transition-all">
               <LogOut size={22} />
@@ -192,14 +236,15 @@ const App: React.FC = () => {
             <h2 className="text-sm font-black text-slate-400 uppercase tracking-widest">{t.appName} / {navItems.find(i => i.id === activeTab)?.label}</h2>
           </div>
           <div className="flex items-center gap-4">
+            <button onClick={() => setShowNotifications(true)} className="p-2.5 bg-slate-50 text-slate-400 rounded-xl hover:bg-blue-50 hover:text-blue-600 transition-all relative">
+              <Bell size={20} />
+              {unreadCount > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center border-2 border-white animate-bounce">{unreadCount}</span>}
+            </button>
             <div className="text-right hidden sm:block">
               <p className="text-sm font-black text-slate-900 leading-none">{currentUser.fullName}</p>
               <p className="text-[10px] text-blue-600 font-bold mt-1 uppercase">{currentUser.specialty}</p>
             </div>
-            <img 
-              src={currentUser.profileImage || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.fullName)}&background=0D8ABC&color=fff`} 
-              className="w-10 h-10 rounded-xl border border-slate-100 shadow-sm object-cover"
-            />
+            <img src={currentUser.profileImage || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.fullName)}&background=0D8ABC&color=fff`} className="w-10 h-10 rounded-xl border border-slate-100 shadow-sm object-cover"/>
           </div>
         </header>
 

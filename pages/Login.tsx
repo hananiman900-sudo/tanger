@@ -28,22 +28,34 @@ const Login: React.FC<LoginProps> = ({ lang, onLogin, setLang }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
+    
     setLoading(true);
     setError(null);
+    
+    // أمان إضافي: التوقف بعد 10 ثوانٍ مهما حدث
+    const timeout = setTimeout(() => {
+      if (loading) {
+        setLoading(false);
+        setError(lang === 'ar' ? 'فشل الاتصال، يرجى المحاولة مرة أخرى' : 'Connection timeout, please try again');
+      }
+    }, 10000);
     
     try {
       const email = `${phone.trim()}@tangerhub.ma`;
 
+      // 1. محاولة تسجيل الدخول عبر نظام Auth
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (authError) {
-        throw new Error(lang === 'ar' ? 'بيانات الدخول غير صحيحة أو الحساب غير موجود' : 'Invalid credentials or account not found');
+        throw new Error(lang === 'ar' ? 'بيانات الدخول غير صحيحة' : 'Invalid credentials');
       }
 
       if (authData?.user) {
+        // 2. التحقق من وجود الملف الشخصي في قاعدة البيانات
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
           .select('*')
@@ -53,17 +65,23 @@ const Login: React.FC<LoginProps> = ({ lang, onLogin, setLang }) => {
         if (profileError) throw profileError;
         
         if (profileData) {
+          // نجاح كامل
           onLogin(profileData as User);
         } else {
-          // If auth success but no profile, it might be a sync delay
-          throw new Error(lang === 'ar' ? 'جاري إعداد ملفك الشخصي، يرجى المحاولة بعد لحظات' : 'Profile setting up, please try again in a moment');
+          // حالة خاصة: الحساب موجود في Auth ولكن تم مسحه من Profiles (بسبب التنظيف)
+          await supabase.auth.signOut();
+          throw new Error(lang === 'ar' 
+            ? 'هذا الحساب تم حذفه من النظام (بعد عملية التنظيف)، يرجى إنشاء حساب جديد' 
+            : 'Account data was cleared, please register again');
         }
       }
     } catch (err: any) {
       console.error('Login error:', err);
       setError(err.message);
-    } finally {
       setLoading(false);
+    } finally {
+      clearTimeout(timeout);
+      // لا نضع setLoading(false) هنا مباشرة لأن التوجيه سيتم عبر onLogin في حال النجاح
     }
   };
 
@@ -81,7 +99,6 @@ const Login: React.FC<LoginProps> = ({ lang, onLogin, setLang }) => {
         <button 
           onClick={() => setShowSqlModal(true)}
           className="p-3 bg-blue-50 text-blue-600 rounded-2xl border border-blue-100 hover:bg-blue-100 transition-all shadow-sm"
-          title="Database Setup"
         >
           <Database size={20} />
         </button>
@@ -91,19 +108,19 @@ const Login: React.FC<LoginProps> = ({ lang, onLogin, setLang }) => {
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-2xl rounded-[32px] overflow-hidden shadow-2xl flex flex-col h-[85vh]">
             <div className="p-6 border-b flex justify-between items-center bg-slate-50">
-              <div className="flex items-center space-x-3 space-x-reverse">
+              <div className="flex items-center space-x-3 space-x-reverse text-slate-900">
                 <Database className="text-blue-600" />
                 <h3 className="font-black text-xl">{lang === 'ar' ? 'أكواد SQL للإدارة' : 'SQL Admin Codes'}</h3>
               </div>
               <button onClick={() => setShowSqlModal(false)} className="p-2 hover:bg-slate-200 rounded-xl transition-all"><X /></button>
             </div>
             
-            <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-hide">
+            <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-hide text-slate-900">
               <div className="bg-amber-50 p-4 rounded-2xl border border-amber-200 mb-4">
                 <p className="text-xs text-amber-800 font-bold leading-relaxed">
                   {lang === 'ar' 
-                    ? '⚠️ تنبيه: إذا كنت تواجه مشكلة في تسجيل الدخول بعد التسجيل، تأكد من تشغيل كود "CORE_SETUP" في Supabase SQL Editor أولاً.' 
-                    : '⚠️ Warning: If you have issues logging in after registration, make sure to run "CORE_SETUP" in Supabase SQL Editor first.'}
+                    ? '⚠️ تنبيه: إذا قمت بتشغيل كود التنظيف (CLEAN_DATABASE)، ستحتاج لإعادة تسجيل حسابات جديدة لأن البيانات القديمة تُحذف تماماً.' 
+                    : '⚠️ Warning: If you run the CLEAN_DATABASE script, you must register new accounts as old data is deleted.'}
                 </p>
               </div>
               
@@ -154,7 +171,7 @@ const Login: React.FC<LoginProps> = ({ lang, onLogin, setLang }) => {
       <form onSubmit={handleSubmit} className="space-y-6">
         {error && (
           <div className="bg-red-50 border border-red-100 p-4 rounded-2xl flex items-center gap-3 text-red-600 text-sm font-bold animate-in fade-in slide-in-from-top-2">
-            <AlertCircle size={20} />
+            <AlertCircle size={20} className="shrink-0" />
             <p>{error}</p>
           </div>
         )}
@@ -167,7 +184,7 @@ const Login: React.FC<LoginProps> = ({ lang, onLogin, setLang }) => {
               type="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              className={`w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 ${lang === 'ar' ? 'pr-12 pl-4' : 'pl-12 pr-4'} focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all font-bold`}
+              className={`w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 ${lang === 'ar' ? 'pr-12 pl-4' : 'pl-12 pr-4'} focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all font-bold text-slate-900`}
               placeholder="06 XX XX XX XX"
               required
             />
@@ -182,7 +199,7 @@ const Login: React.FC<LoginProps> = ({ lang, onLogin, setLang }) => {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className={`w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 ${lang === 'ar' ? 'pr-12 pl-4' : 'pl-12 pr-4'} focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all`}
+              className={`w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 ${lang === 'ar' ? 'pr-12 pl-4' : 'pl-12 pr-4'} focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all text-slate-900`}
               placeholder="••••••••"
               required
             />
@@ -192,7 +209,7 @@ const Login: React.FC<LoginProps> = ({ lang, onLogin, setLang }) => {
         <button 
           type="submit"
           disabled={loading}
-          className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-xl shadow-blue-100 hover:bg-blue-700 active:scale-[0.98] transition-all flex items-center justify-center space-x-2 space-x-reverse disabled:opacity-70"
+          className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-xl shadow-blue-100 hover:bg-blue-700 active:scale-[0.98] transition-all flex items-center justify-center space-x-2 space-x-reverse disabled:opacity-70 h-16"
         >
           {loading ? <Loader2 className="animate-spin" /> : (
             <>
