@@ -1,7 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { User, Language, Post } from '../types';
-// Add Image as ImageIcon to the imports
 import { 
   Camera, MapPin, Settings, LogOut, Share2, Wallet, Instagram, Facebook, Phone, Save, Loader2, X, CheckCircle, Info, Database, AlertCircle, Linkedin, Building2, Layers, Grid, List, MessageCircle, Globe, Edit3, Heart, MessageSquare, RefreshCw, TrendingUp, CreditCard, Image as ImageIcon
 } from 'lucide-react';
@@ -35,7 +34,6 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, onLogout, onUpdate, lan
     description: user.description || ''
   });
 
-  // تحديث البيانات عند فتح الصفحة لضمان مطابقة الرصيد
   useEffect(() => {
     const syncData = async () => {
       setRefreshing(true);
@@ -140,6 +138,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, onLogout, onUpdate, lan
            </h2>
            <div className="flex items-center gap-4">
               <button onClick={() => setShowEditModal(true)} className="p-2 bg-slate-50 rounded-xl text-slate-600"><Settings size={20}/></button>
+              <button onClick={onLogout} className="p-2 bg-red-50 rounded-xl text-red-500 hover:bg-red-100 transition-all"><LogOut size={20}/></button>
            </div>
         </div>
 
@@ -194,13 +193,13 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, onLogout, onUpdate, lan
            >
              <Edit3 size={14} /> تعديل الحساب
            </button>
-           <button className="bg-slate-100 text-slate-900 px-4 rounded-xl hover:bg-slate-200 transition-all active:scale-95">
-             <Share2 size={16} />
+           <button onClick={onLogout} className="flex-1 bg-red-50 text-red-600 py-3 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-2 active:scale-95">
+             <LogOut size={14} /> خروج
            </button>
         </div>
       </div>
 
-      {/* Wallet Summary Card (Quick view of balance synced with main screen) */}
+      {/* Wallet Summary Card */}
       <div className="px-5 mb-8">
          <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-[30px] p-6 text-white shadow-xl shadow-slate-200 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16"></div>
