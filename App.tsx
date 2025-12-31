@@ -38,13 +38,17 @@ const App: React.FC = () => {
   }, []);
 
   const fetchNotifications = async (userId: string) => {
-    const { data } = await supabase
-      .from('notifications')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(20);
-    if (data) setNotifications(data);
+    try {
+      const { data } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(20);
+      if (data) setNotifications(data);
+    } catch (e) {
+      console.error("Notifications fetch error", e);
+    }
   };
 
   const markAllAsRead = async () => {
@@ -93,11 +97,17 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const initApp = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        await fetchProfile(session.user.id);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          await fetchProfile(session.user.id);
+        }
+      } catch (e) {
+        console.error("App init error:", e);
+      } finally {
+        // تقليل التأخير الإجباري إلى 500ms فقط بدلاً من 2000ms
+        setTimeout(() => setLoading(false), 500);
       }
-      setTimeout(() => setLoading(false), 2000);
     };
     initApp();
 
