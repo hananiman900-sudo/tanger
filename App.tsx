@@ -97,18 +97,25 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const initApp = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-          await fetchProfile(session.user.id);
+      // مؤقت إجباري لجعل الانتقال يدوم 3.5 ثوانٍ لضمان الاحترافية
+      const minDisplayTime = new Promise(resolve => setTimeout(resolve, 3500));
+      
+      const loadData = async () => {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session) {
+            await fetchProfile(session.user.id);
+          }
+        } catch (e) {
+          console.error("Data load error:", e);
         }
-      } catch (e) {
-        console.error("App init error:", e);
-      } finally {
-        // تقليل التأخير الإجباري إلى 500ms فقط بدلاً من 2000ms
-        setTimeout(() => setLoading(false), 500);
-      }
+      };
+
+      // تنفيذ جلب البيانات والانتظار الأدنى معاً
+      await Promise.all([loadData(), minDisplayTime]);
+      setLoading(false);
     };
+
     initApp();
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
