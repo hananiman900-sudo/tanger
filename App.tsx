@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  Building2, Search, LayoutDashboard, UserCircle, Bell, LogOut, AlertCircle, Loader2, Database, RefreshCcw, Home, PlusCircle, ChevronLeft, Menu, X, CheckCircle2, DollarSign, Info
+  Building2, Home, PlusCircle, UserCircle, Bell, LogOut, Info, DollarSign, X, Menu
 } from 'lucide-react';
-import { User, UserRole, AccountStatus, Referral, Language, Notification } from './types';
+import { User, UserRole, AccountStatus, Language, Notification } from './types';
 import { translations } from './translations';
 import { supabase } from './supabase';
 
@@ -37,26 +37,6 @@ const App: React.FC = () => {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
-  const fetchNotifications = async (userId: string) => {
-    try {
-      const { data } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(20);
-      if (data) setNotifications(data);
-    } catch (e) {
-      console.error("Notifications fetch error", e);
-    }
-  };
-
-  const markAllAsRead = async () => {
-    if (!currentUser) return;
-    await supabase.from('notifications').update({ is_read: true }).eq('user_id', currentUser.id);
-    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
-  };
-
   const mapProfile = (data: any): User => ({
     id: data.id,
     fullName: data.full_name || 'Utilisateur',
@@ -85,49 +65,59 @@ const App: React.FC = () => {
       const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
       if (data) {
         setCurrentUser(mapProfile(data));
-        fetchNotifications(userId);
       } else {
-        setCurrentUser(null);
         await supabase.auth.signOut();
+        setCurrentUser(null);
       }
     } catch (err) {
-      console.error("Error fetching profile:", err);
+      console.error("Profile Fetch Error", err);
     }
   };
 
   useEffect(() => {
-    const initApp = async () => {
-      // مؤقت إجباري لجعل الانتقال يدوم 3.5 ثوانٍ لضمان الاحترافية
-      const minDisplayTime = new Promise(resolve => setTimeout(resolve, 3500));
-      
-      const loadData = async () => {
-        try {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session) {
-            await fetchProfile(session.user.id);
-          }
-        } catch (e) {
-          console.error("Data load error:", e);
-        }
-      };
+    let mounted = true;
 
-      // تنفيذ جلب البيانات والانتظار الأدنى معاً
-      await Promise.all([loadData(), minDisplayTime]);
-      setLoading(false);
+    const initApp = async () => {
+      // 1. إعداد مؤقت أمان إجباري (Safety Net)
+      // هذا السطر يضمن أن التطبيق سيعمل بعد 4 ثوانٍ مهما حدث
+      const safetyTimer = setTimeout(() => {
+        if (mounted) setLoading(false);
+      }, 4000);
+
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session && mounted) {
+          await fetchProfile(session.user.id);
+        }
+      } catch (e) {
+        console.error("Auth Init Error", e);
+      } finally {
+        // إذا استجابت قاعدة البيانات قبل 4 ثوانٍ، ننتظر قليلاً لجمالية التصميم ثم نفتح
+        setTimeout(() => {
+          if (mounted) {
+            clearTimeout(safetyTimer);
+            setLoading(false);
+          }
+        }, 3500);
+      }
     };
 
     initApp();
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session) { 
+      if (event === 'SIGNED_IN' && session && mounted) { 
         await fetchProfile(session.user.id); 
       } 
-      else if (event === 'SIGNED_OUT') { 
+      else if (event === 'SIGNED_OUT' && mounted) { 
         setCurrentUser(null); 
         setActiveTab('dashboard'); 
       }
     });
-    return () => { authListener.subscription.unsubscribe(); };
+
+    return () => { 
+      mounted = false;
+      authListener.subscription.unsubscribe();
+    };
   }, []);
 
   const handleLogout = async () => {
@@ -155,8 +145,6 @@ const App: React.FC = () => {
     { id: 'profile', label: t.profile, icon: <UserCircle size={22} /> },
   ];
 
-  const unreadCount = notifications.filter(n => !n.is_read).length;
-
   const renderContent = () => {
     if (currentUser.role === UserRole.ADMIN) return <AdminDashboard lang={lang} onLogout={handleLogout} />;
     switch (activeTab) {
@@ -170,43 +158,7 @@ const App: React.FC = () => {
 
   return (
     <div className={`flex h-screen bg-[#F8FAFC] ${t.font}`} dir={t.dir}>
-      {showNotifications && (
-        <div className="fixed inset-0 z-[100] flex">
-           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowNotifications(false)}></div>
-           <div className={`relative bg-white w-full max-w-sm h-full shadow-2xl animate-in ${lang === 'ar' ? 'slide-in-from-right' : 'slide-in-from-left'} duration-300 flex flex-col`}>
-              <div className="p-6 border-b flex justify-between items-center bg-slate-50">
-                 <h3 className="text-xl font-black text-slate-900">التنبيهات</h3>
-                 <button onClick={() => setShowNotifications(false)} className="p-2 bg-white rounded-xl shadow-sm"><X size={20}/></button>
-              </div>
-              <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                 {notifications.length > 0 ? notifications.map(notif => (
-                    <div key={notif.id} className={`p-4 rounded-2xl border flex gap-4 transition-all ${notif.is_read ? 'bg-white border-slate-100 opacity-70' : 'bg-blue-50 border-blue-100 shadow-sm'}`}>
-                       <div className={`p-3 rounded-xl shrink-0 h-fit ${
-                          notif.type === 'REFERRAL' ? 'bg-amber-100 text-amber-600' : 
-                          notif.type === 'PAYMENT' ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'
-                       }`}>
-                          {notif.type === 'REFERRAL' ? <PlusCircle size={20}/> : notif.type === 'PAYMENT' ? <DollarSign size={20}/> : <Info size={20}/>}
-                       </div>
-                       <div className="flex-1">
-                          <p className="text-sm font-black text-slate-900 leading-tight mb-1">{notif.title}</p>
-                          <p className="text-xs text-slate-500 font-bold leading-relaxed">{notif.message}</p>
-                          <p className="text-[8px] text-slate-400 mt-2 uppercase font-black">{new Date(notif.created_at).toLocaleTimeString()}</p>
-                       </div>
-                    </div>
-                 )) : (
-                   <div className="flex flex-col items-center justify-center h-full text-slate-300">
-                      <Bell size={48} className="mb-4 opacity-20" />
-                      <p className="font-black text-xs uppercase tracking-widest">لا توجد تنبيهات جديدة</p>
-                   </div>
-                 )}
-              </div>
-              <div className="p-6 border-t bg-slate-50">
-                 <button onClick={markAllAsRead} className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-xs active:scale-95 transition-all">تحديد الكل كمقروء</button>
-              </div>
-           </div>
-        </div>
-      )}
-
+      {/* Sidebar for Desktop */}
       {currentUser.role !== UserRole.ADMIN && (
         <aside className={`hidden md:flex flex-col bg-slate-900 text-white transition-all duration-300 ${isSidebarOpen ? 'w-72' : 'w-24'} border-l border-white/5 relative z-50`}>
           <div className="p-6 flex items-center justify-between">
@@ -234,12 +186,6 @@ const App: React.FC = () => {
               </button>
             ))}
           </nav>
-          <div className="p-4 border-t border-white/5">
-            <button onClick={handleLogout} className="w-full flex items-center gap-4 px-5 py-4 text-red-400 hover:bg-red-500/10 rounded-2xl transition-all">
-              <LogOut size={22} />
-              {isSidebarOpen && <span className="font-bold text-sm">خروج</span>}
-            </button>
-          </div>
         </aside>
       )}
 
@@ -249,19 +195,12 @@ const App: React.FC = () => {
              <div className="bg-blue-600 p-2 rounded-xl text-white"><Building2 size={20} /></div>
              <span className="font-black text-lg">TangerHub</span>
           </div>
-          <div className="hidden md:block">
-            <h2 className="text-sm font-black text-slate-400 uppercase tracking-widest">{t.appName} / {navItems.find(i => i.id === activeTab)?.label}</h2>
-          </div>
           <div className="flex items-center gap-4">
-            <button onClick={() => setShowNotifications(true)} className="p-2.5 bg-slate-50 text-slate-400 rounded-xl hover:bg-blue-50 hover:text-blue-600 transition-all relative">
-              <Bell size={20} />
-              {unreadCount > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center border-2 border-white animate-bounce">{unreadCount}</span>}
-            </button>
-            <div className="text-right hidden sm:block">
-              <p className="text-sm font-black text-slate-900 leading-none">{currentUser.fullName}</p>
-              <p className="text-[10px] text-blue-600 font-bold mt-1 uppercase">{currentUser.specialty}</p>
-            </div>
-            <img src={currentUser.profileImage || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.fullName)}&background=0D8ABC&color=fff`} className="w-10 h-10 rounded-xl border border-slate-100 shadow-sm object-cover"/>
+             <div className="text-right hidden sm:block">
+                <p className="text-sm font-black text-slate-900 leading-none">{currentUser.fullName}</p>
+                <p className="text-[10px] text-blue-600 font-bold mt-1 uppercase">{currentUser.specialty}</p>
+             </div>
+             <img src={currentUser.profileImage || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.fullName)}&background=0D8ABC&color=fff`} className="w-10 h-10 rounded-xl border border-slate-100 shadow-sm object-cover"/>
           </div>
         </header>
 
@@ -271,8 +210,9 @@ const App: React.FC = () => {
           </div>
         </main>
 
+        {/* Mobile Nav */}
         {currentUser.role !== UserRole.ADMIN && (
-          <nav className="md:hidden bg-white border-t px-2 py-2 flex items-center justify-around z-40">
+          <nav className="md:hidden bg-white border-t px-2 py-2 flex items-center justify-around z-40 shadow-[0_-4px_20px_rgba(0,0,0,0.03)]">
             {navItems.map((item) => (
               <button
                 key={item.id}

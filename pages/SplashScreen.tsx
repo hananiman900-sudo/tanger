@@ -9,20 +9,23 @@ interface SplashProps {
 }
 
 const SplashScreen: React.FC<SplashProps> = ({ lang }) => {
-  const t = translations[lang];
+  const t = translations[lang] || translations.ar;
   const [progress, setProgress] = useState(0);
 
   useEffect(() => {
-    // محاكاة شريط تقدم واقعي خلال 3 ثوانٍ
+    // محاكاة شريط تقدم واقعي يتباطأ في البداية ويتسارع في النهاية
     const interval = setInterval(() => {
       setProgress(prev => {
         if (prev >= 100) {
           clearInterval(interval);
           return 100;
         }
-        return prev + 1;
+        // تسريع العداد كلما اقترب من النهاية لضمان عدم الشعور بالملل
+        const increment = prev > 80 ? 2 : 1;
+        return prev + increment;
       });
     }, 30);
+    
     return () => clearInterval(interval);
   }, []);
 
@@ -35,8 +38,8 @@ const SplashScreen: React.FC<SplashProps> = ({ lang }) => {
       <div className="relative z-10 flex flex-col items-center">
         {/* Animated Logo */}
         <div className="mb-8 relative">
-          <div className="absolute inset-0 bg-blue-600 blur-2xl opacity-20 animate-pulse rounded-full"></div>
-          <div className="bg-gradient-to-tr from-blue-600 to-blue-400 p-8 rounded-[40px] shadow-2xl shadow-blue-200 relative animate-in zoom-in duration-700">
+          <div className="absolute inset-0 bg-blue-600 blur-2xl opacity-10 animate-pulse rounded-full"></div>
+          <div className="bg-gradient-to-tr from-blue-700 to-blue-500 p-8 rounded-[40px] shadow-2xl shadow-blue-200 relative animate-in zoom-in duration-700">
             <Building2 size={80} className="text-white" />
           </div>
         </div>
@@ -49,7 +52,7 @@ const SplashScreen: React.FC<SplashProps> = ({ lang }) => {
       </div>
       
       {/* Bottom Progress Bar */}
-      <div className="absolute bottom-20 w-full max-w-[200px] flex flex-col items-center gap-4 animate-in fade-in duration-1000 delay-500">
+      <div className="absolute bottom-24 w-full max-w-[240px] flex flex-col items-center gap-4 animate-in fade-in duration-1000 delay-300">
         <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden shadow-inner">
           <div 
             className="h-full bg-blue-600 transition-all duration-300 ease-out rounded-full shadow-lg shadow-blue-200"
@@ -62,8 +65,8 @@ const SplashScreen: React.FC<SplashProps> = ({ lang }) => {
         </div>
       </div>
 
-      <div className="absolute bottom-8 text-slate-300 text-[8px] font-black uppercase tracking-[0.4em]">
-        TangerHub Affiliate Network v1.2
+      <div className="absolute bottom-10 text-slate-300 text-[8px] font-black uppercase tracking-[0.4em]">
+        TangerHub Network • Premium Experience
       </div>
     </div>
   );
