@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Building2, Home, PlusCircle, UserCircle, Bell, LogOut, Info, DollarSign, X, Menu
 } from 'lucide-react';
-import { User, UserRole, AccountStatus, Language, Notification } from './types';
+import { User, UserRole, AccountStatus, Language, Notification, AccountType, PlanType } from './types';
 import { translations } from './translations';
 import { supabase } from './supabase';
 
@@ -37,12 +37,15 @@ const App: React.FC = () => {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
+  // Fix: Added missing properties accountType, plan, and debtBalance to satisfy the User interface
   const mapProfile = (data: any): User => ({
     id: data.id,
     fullName: data.full_name || 'Utilisateur',
     phone: data.phone || '',
     role: (data.role as UserRole) || UserRole.PROFESSIONAL,
     status: (data.status as AccountStatus) || AccountStatus.PENDING,
+    accountType: (data.account_type as AccountType) || 'PROFESSIONAL',
+    plan: (data.plan as PlanType) || 'FREE',
     neighborhood: data.neighborhood,
     specialty: data.specialty,
     buildingId: data.building_id,
@@ -52,6 +55,7 @@ const App: React.FC = () => {
     profileImage: data.profile_image,
     balancePending: Number(data.balance_pending || 0),
     balanceCompleted: Number(data.balance_completed || 0),
+    debtBalance: Number(data.debt_balance || 0),
     referralCode: data.referral_code || '',
     bankAccount: data.bank_account,
     socialLinks: data.social_links,

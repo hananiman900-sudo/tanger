@@ -11,6 +11,9 @@ export enum AccountStatus {
   SUSPENDED = 'SUSPENDED'
 }
 
+export type AccountType = 'PROFESSIONAL' | 'MARKETER';
+export type PlanType = 'FREE' | 'PREMIUM';
+
 export type Language = 'ar' | 'fr' | 'en';
 
 export interface User {
@@ -19,6 +22,8 @@ export interface User {
   phone: string;
   role: UserRole;
   status: AccountStatus;
+  accountType: AccountType;
+  plan: PlanType;
   neighborhood?: string;
   specialty?: string;
   buildingId?: string;
@@ -28,6 +33,7 @@ export interface User {
   profileImage?: string;
   balancePending: number;
   balanceCompleted: number;
+  debtBalance: number; // المبلغ الذي يدينه الطبيب للتطبيق
   referralCode: string;
   bankAccount?: string;
   socialLinks?: {
